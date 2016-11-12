@@ -4,9 +4,15 @@ import android.content.res.AssetManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.support.v7.app.AppCompatActivity;
-import android.util.Log;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonDeserializationContext;
+import com.google.gson.JsonDeserializer;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
 import com.google.gson.annotations.SerializedName;
 
 import org.json.JSONArray;
@@ -14,9 +20,9 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -30,16 +36,22 @@ public class MainActivity extends AppCompatActivity {
         new Handler().post(new Runnable() {
             @Override
             public void run() {
-                long start;
-                long objectTime;
-                long gsonTime;
-                Gson gson = new Gson();
+                Gson gson = new GsonBuilder()
+                        .registerTypeAdapter(OpenWeatherMapForGson.class, new OpenWeatherMapForGsonDeserializer())
+                        .create();
 
                 try {
                     AssetManager as = getResources().getAssets();
-                    InputStream is = as.open("owm_data1.json");
+                    InputStream is = as.open("owm_data2.json"); // 2の場合は、空配列が含まれる
                     BufferedReader br = new BufferedReader(new InputStreamReader(is));
                     String json = br.readLine();
+
+                    gson.fromJson(json, OpenWeatherMapForGson.class);
+
+                    /* 計測
+                    long start;
+                    long objectTime;
+                    long gsonTime;
                     start = System.currentTimeMillis();
                     for (int j = 0; j < 10000; j++) {
                         analyzerJson(json);
@@ -53,7 +65,8 @@ public class MainActivity extends AppCompatActivity {
                     gsonTime = System.currentTimeMillis() - start;
 
                     Log.d("測定", "object: " + objectTime + " gson: " + gsonTime);
-                } catch (IOException | JSONException ignore) {
+                    */
+                } catch (Exception ignore) {
                 }
             }
         });
@@ -202,6 +215,91 @@ public class MainActivity extends AppCompatActivity {
 
         public class Clouds {
             public int all;
+        }
+    }
+
+    /**
+     * 出し分けするためのデシリアライザー
+     * 使用するすべての要素について書かなければならない
+     */
+    public class OpenWeatherMapForGsonDeserializer implements JsonDeserializer<OpenWeatherMapForGson> {
+
+        @Override
+        public OpenWeatherMapForGson deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
+            OpenWeatherMapForGson openWeatherMapForGson = new OpenWeatherMapForGson();
+
+            JsonObject obj = (JsonObject) json;
+
+            // coord
+            JsonElement coordElement = obj.get("coord");
+            openWeatherMapForGson.coord = context.deserialize(coordElement, OpenWeatherMapForGson.Coord.class);
+
+            // sys
+            JsonElement sysElement = obj.get("sys");
+            openWeatherMapForGson.sys = context.deserialize(sysElement, OpenWeatherMapForGson.Sys.class);
+
+            // weather
+            JsonElement weatherElement = obj.get("weather");
+            JsonArray weatherArray = weatherElement.getAsJsonArray();
+            List <OpenWeatherMapForGson.Weather> weathers = new ArrayList<>();
+            OpenWeatherMapForGson.Weather weather;
+            for (JsonElement jsonElement : weatherArray) {
+                weather = context.deserialize(jsonElement, OpenWeatherMapForGson.Weather.class);
+                weathers.add(weather);
+            }
+            openWeatherMapForGson.weather = weathers;
+
+            // main
+            JsonElement mainElement = obj.get("main");
+            openWeatherMapForGson.main = context.deserialize(mainElement, OpenWeatherMapForGson.Main.class);
+
+            // wind
+            JsonElement windElement = obj.get("wind");
+            OpenWeatherMapForGson.Wind wind;
+            if (windElement.isJsonObject()) {
+                wind = context.deserialize(windElement, OpenWeatherMapForGson.Wind.class);
+            } else {
+                wind = null;
+            }
+            openWeatherMapForGson.wind = wind;
+
+            // rain
+            JsonElement rainElement = obj.get("rain");
+            OpenWeatherMapForGson.Rain rain;
+            if (rainElement.isJsonObject()) {
+                rain = context.deserialize(rainElement, OpenWeatherMapForGson.Rain.class);
+            } else {
+                rain = null;
+            }
+            openWeatherMapForGson.rain = rain;
+
+            // clouds
+            JsonElement cloudsElement = obj.get("clouds");
+            OpenWeatherMapForGson.Clouds clouds;
+            if (cloudsElement.isJsonObject()) {
+                clouds = context.deserialize(cloudsElement, OpenWeatherMapForGson.Clouds.class);
+            } else {
+                clouds = null;
+            }
+            openWeatherMapForGson.clouds = clouds;
+
+            // dt
+            JsonElement dtElement = obj.get("dt");
+            openWeatherMapForGson.dt = context.deserialize(dtElement, Long.class);
+
+            // id
+            JsonElement idElement = obj.get("id");
+            openWeatherMapForGson.id = context.deserialize(idElement, Long.class);
+
+            // name
+            JsonElement nameElement = obj.get("name");
+            openWeatherMapForGson.name = context.deserialize(nameElement, String.class);
+
+            //cod
+            JsonElement codElement = obj.get("cod");
+            openWeatherMapForGson.cod = context.deserialize(codElement, Integer.class);
+
+            return openWeatherMapForGson;
         }
     }
 }
